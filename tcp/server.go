@@ -40,21 +40,20 @@ func MultiThreadedServer(ip string, port string, handleConnection func(net.Conn,
 		}
 	}()
 
+	// a separate thread to listen for incoming connections
+	// if a connection is received, notify the listen channel and break out of select to handle connection
 	fmt.Println("Server listening...")
-	for {
-		// a separate thread to listen for incoming connections
-		// if a connection is received, notify the listen channel and break out of select to handle connection
-		go func() {
-			for {
-				conn, err := ln.Accept()
-				if err != nil {
-					continue
-				}
-				listen <- conn
-				break
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				continue
 			}
-		}()
+			listen <- conn
+		}
+	}()
 
+	for {
 		// blocks until either a quit signal or a listen signal is received
 		// if quit is received, close the listener and exit the server
 		// else if listen is received, handle the new connection
