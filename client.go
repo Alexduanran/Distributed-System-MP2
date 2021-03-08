@@ -25,14 +25,12 @@ func main() {
 	tcp.UnicastSend(conn, msg.Message{"JOIN", msg.Chat{"", username, ""}})
 
 	// quitScan channel listens for signal to stop the scanning process
-	// quitReceive channel listens for signal to stop handleMessages
 	// scan channel listens for signal when user inputs a new command
 	quitScan := make(chan struct{})
-	quitReceive := make(chan struct{})
 	scan := make(chan struct{})
 
 	// listener that waits for messages from the server
-	go handleMessages(conn, quitScan, quitReceive)
+	go handleMessages(conn, quitScan)
 
 	// listen for user command
 	scanner := bufio.NewScanner(os.Stdin)
@@ -59,7 +57,6 @@ func main() {
 		// notify server about connection closing and close the client process
 		if input == "EXIT" {
 			tcp.UnicastSend(conn, msg.Message{"EXIT", msg.Chat{"", username, ""}})
-			quitReceive <- struct{}{}
 			return
 
 		// if user inputs "NEW"
@@ -82,28 +79,10 @@ func main() {
 
 // handleMessages handle the messages received from the server through the connection conn
 // takes in quitScan and quitReceive to close the two processes
-func handleMessages(conn net.Conn, quitScan chan struct{}, quitReceive chan struct{}) {
-	// receive channel listens for signal when a new message is received from the server
-	receive := make(chan struct{})
-
+func handleMessages(conn net.Conn, quitScan chan struct{}) {
 	for {
-		// a separate thread that waits for messages from the server
-		// if a new message is received, notify through the receive channel
 		var message msg.Message
-		go func() {
-			tcp.UnicastReceive(conn, &message)
-			receive <- struct{}{}
-		}()
-
-		// blocks until either a quitReceive signal or a receive signal is received
-		// if quitReceive is received, breaks out of the function
-		// else if receive is received, continue to handle the message received
-		select {
-		case <-quitReceive:
-			return
-		case <-receive:
-			break
-		}
+		tcp.UnicastReceive(conn, &message)
 
 		// a separate thread that handles the message received from the server
 		go func(msg msg.Message) {
@@ -111,12 +90,10 @@ func handleMessages(conn net.Conn, quitScan chan struct{}, quitReceive chan stru
 			// termination message received from the server
 			case "EXIT":
 				fmt.Println("Termination message received from server. Exiting")
-				quitReceive <- struct{}{}
 				quitScan <- struct{}{}
 			// the username the user chooses already exists in the server's database
 			case "TAKEN":
 				fmt.Printf("The username '%v' is already taken. Please enter another username.\n", message.Chat.To)
-				quitReceive <- struct{}{}
 				quitScan <- struct{}{}
 			// the username the user sends the message to does not exist in the server's database
 			case "NIL":
